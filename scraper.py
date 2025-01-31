@@ -1,30 +1,67 @@
 import re
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin, urldefrag
+from bs4 import BeautifulSoup
 
 def scraper(url, resp):
     links = extract_next_links(url, resp)
     return [link for link in links if is_valid(link)]
 
 def extract_next_links(url, resp):
-    # Implementation required.
-    # url: the URL that was used to get the page
-    # resp.url: the actual url of the page
-    # resp.status: the status code returned by the server. 200 is OK, you got the page. Other numbers mean that there was some kind of problem.
-    # resp.error: when status is not 200, you can check the error here, if needed.
-    # resp.raw_response: this is where the page actually is. More specifically, the raw_response has two parts:
-    #         resp.raw_response.url: the url, again
-    #         resp.raw_response.content: the content of the page!
-    # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
-    return list()
+    '''
+    Params:
+        url: the URL that was used to get the page
+        resp.url: the actual url of the page
+        resp.status: the status code returned by the server. 200 is OK, you got the page. Other numbers mean that there was some kind of problem.
+        resp.error: when status is not 200, you can check the error here, if needed.
+        resp.raw_response: this is where the page actually is. More specifically, the raw_response has two parts:
+                resp.raw_response.url: the url, again
+                resp.raw_response.content: the content of the page!
+    Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
+    '''
+    valid_links = []
+
+    # Check if status of page is 200, if not print the error message
+    if resp.status != 200:
+        print(f'Error: Recieved status {resp.status}.')
+        return []
+    
+    # Parse the HTML content of the page
+    soup = BeautifulSoup(resp.raw_response.content, "lxml")
+
+    # Find all anchor tags that contain an href (specifies hyperlink) attribute
+    all_links = soup.find_all('a', href=True)
+
+    for link in all_links:
+        href = link['href']
+        # Convert to absolute URLS (urljoin handles when href is already absolute)
+        abs_url = urljoin(url, href)
+        # Remove fragment
+        abs_url = urldefrag(abs_url)[0]
+
+        if is_valid(abs_url):
+            valid_links.append(abs_url)
+    
+    return valid_links
 
 def is_valid(url):
-    # Decide whether to crawl this url or not. 
-    # If you decide to crawl it, return True; otherwise return False.
-    # There are already some conditions that return False.
+    '''
+    Decide whether to crawl this url or not. 
+    If you decide to crawl it, return True; otherwise return False.
+    There are already some conditions that return False.
+    '''
+    
     try:
         parsed = urlparse(url)
         if parsed.scheme not in set(["http", "https"]):
             return False
+        
+        # Allow only URLs from the specified domains
+        valid_domains = {".ics.uci.edu", ".cs.uci.edu", ".informatics.uci.edu", ".stat.uci.edu"}
+        # Check if authority (aka netloc) ends with valid domains
+        # !!! not sure if this is correct (does hi.ics.uci.edu count?) !!!
+        if not any(parsed.netloc.endswith(domain) for domain in valid_domains):
+            return False
+        
         return not re.match(
             r".*\.(css|js|bmp|gif|jpe?g|ico"
             + r"|png|tiff?|mid|mp2|mp3|mp4"
