@@ -25,6 +25,18 @@ def extract_next_links(url, resp):
         print(f'Error: Recieved status {resp.status}.')
         return []
     
+    # Detect redirects and use the final URL for crawling
+    final_url = resp.url
+    if final_url != url:
+        print(f'Redirect detected from {url} to {final_url}')
+        url = final_url
+
+    # Avoid crawling very large files
+    content_length = resp.raw_response.headers.get('Content-Length')
+    if content_length and int(content_length) > 10**6:  # Limit set to 1MB
+        print(f'Skipping large file at {url} with size {content_length} bytes.')
+        return []
+    
     # Parse the HTML content of the page
     soup = BeautifulSoup(resp.raw_response.content, "lxml")
 
