@@ -37,12 +37,14 @@ class Worker(Thread):
             if not tbd_url:
                 self.logger.info("Frontier is empty. Stopping Crawler.")
                 break
-            # TODO: Check if the URL is not duplicate and main tain depth to avoid traps!
+
+            # TODO: Check if the URL is not duplicate and maintain depth number which is to used to avoid traps!
+
             resp = download(tbd_url, self.config, self.logger) # Requests for page/resource and will download it (which in the real-world would be saved in the document store)
             self.logger.info(
                 f"Downloaded {tbd_url}, status <{resp.status}>, "
                 f"using cache {self.config.cache_server}.")
-            scraped_urls = scraper.scraper(tbd_url, resp) # Will get net URLs to crawl (this should also document content)
+            scraped_urls = scraper.scraper(tbd_url, resp) # Will get next URLs to crawl (this should also include document content)
             for scraped_url in scraped_urls: # adding URLs to the frontier
                 self.frontier.add_url(scraped_url)
             self.frontier.mark_url_complete(tbd_url)
