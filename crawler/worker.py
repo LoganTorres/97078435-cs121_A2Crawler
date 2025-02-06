@@ -10,7 +10,7 @@ import time
 class Worker(Thread):
     def __init__(self, worker_id, config, frontier): # GOOD
         """
-        Initializes the crawler worker 
+        Initializes the crawler worker
 
         @Parameters:
         worker_id - number to uniquely identify the crawler worker
@@ -38,13 +38,18 @@ class Worker(Thread):
                 self.logger.info("Frontier is empty. Stopping Crawler.")
                 break
 
-            # TODO: Check if the URL is not duplicate and maintain depth number which is to used to avoid traps!
+            # TODO: Check if the URL is not duplicate (using hash set or so) and maintain depth number which is to used to avoid traps!
 
             resp = download(tbd_url, self.config, self.logger) # Requests for page/resource and will download it (which in the real-world would be saved in the document store)
             self.logger.info(
                 f"Downloaded {tbd_url}, status <{resp.status}>, "
                 f"using cache {self.config.cache_server}.")
+            
             scraped_urls = scraper.scraper(tbd_url, resp) # Will get next URLs to crawl (this should also include document content)
+
+            # TODO: Within scraped_urls implement the duplication detection as a helper function and if a duplicate is found, then next URL should just be an empty list
+            #       Set of fingerprint hashes should be stored locally in this function!
+
             for scraped_url in scraped_urls: # adding URLs to the frontier
                 self.frontier.add_url(scraped_url)
             self.frontier.mark_url_complete(tbd_url)
