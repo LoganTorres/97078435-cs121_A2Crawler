@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 
 def scraper(url, resp):
     links = extract_next_links(url, resp)
-    return [link for link in links if is_valid(link)]
+    return [link for link in links if is_valid(link)] # Feel like we should remove this since its redundant
 
 def extract_next_links(url, resp):
     '''
