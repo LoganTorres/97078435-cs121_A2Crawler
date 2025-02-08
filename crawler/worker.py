@@ -40,15 +40,17 @@ class Worker(Thread):
         currentDomain = None
 
         while True:
-            tbd_url = self.frontier.get_tbd_url() # Same as "popping" from queue
+            tbd_url = self.frontier.get_tbd_url() # Similar in a way as if we were "popping" from a queue
+            
             if not tbd_url:
                 self.logger.info("Frontier is empty. Stopping Crawler.")
                 break
 
-            urlDomain = <getDomain>
+            # Get current domain
+            start = tbd_url.find("//")
+            urlDomain = tbd_url[:tbd_url.find("/", start + 2)]
 
-
-            # If the domain changes, then get the robots.txt file for the new domain!
+            # If the domain changes (or is None), then get the robots.txt file for the new domain!
             if((currentDomain == None) or (currentDomain != urlDomain)):
                 robotFileParser.set_url(urlDomain + "/robots.txt") # Get the robots.txt file from the domain in which 'tbd_url' is from
                 robotFileParser.read() # Parse content from robots.txt so that we can check if the crawler may crawl 'tbd_url'
@@ -60,7 +62,7 @@ class Worker(Thread):
 
             # If we've visited the URL before then ignore it and move on to the next URL!
             # Additionally check if we can crawl the URL (not doing so will surely lead to a crawler trap!)
-            if((tbd_url in self._visitedURLS) and robotFileParser.can_fetch(self.config.user_agent, tbd_url)): continue
+            if((tbd_url in self._visitedURLS) or not robotFileParser.can_fetch(self.config.user_agent, tbd_url)): continue
 
             self._visitedURLS.add(tbd_url) # Add to visited URLs set!
 
@@ -79,7 +81,7 @@ class Worker(Thread):
                 self.frontier.add_url(scraped_url)
                 
             self.frontier.mark_url_complete(tbd_url)
-            time.sleep(self.config.time_delay) # Delay for politeness (should be set accordingly in "config.ini")
+            time.sleep(self.config.time_delay) # Delay for politeness
 
     # @classmethod
     # def _getFingerprint(resp): # [WIP]
