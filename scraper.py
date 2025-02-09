@@ -1,5 +1,5 @@
 import re
-from urllib.parse import urlparse, urljoin, urldefrag
+from urllib.parse import urlparse, urljoin, urldefrag, parse_qs
 from bs4 import BeautifulSoup
 
 # top_50_words = 0
@@ -25,7 +25,7 @@ def scraper(url, resp):
     # #print(top_50_words)
     # #print(most_words)
     # #print(unique_pages_counter)
-    # #print(ics_subdomains)
+    # #print(ics_subdomains)n
         
     return valid_links
 
@@ -86,6 +86,12 @@ def is_valid(url):
     '''
     
     try:
+        file_extensions = ( r"\.(css|js|bmp|gif|jpe?g|ico|img|png|tiff?|mid|mp2|mp3|mp4|"
+                          r"wav|avi|mov|mpeg|ram|m4v|mkv|ogg|ogv|pdf|ps|eps|tex|ppt|pptx|doc|"
+                          r"docx|xls|xlsx|names|data|dat|exe|bz2|tar|msi|bin|7z|psd|dmg|iso|"
+                          r"epub|dll|cnf|tgz|sha1|thmx|mso|arff|rtf|jar|csv|rm|smil|wmv|swf|"
+                          r"wma|zip|rar|gz)$" )
+        
         parsed = urlparse(url)
         if parsed.scheme not in set(["http", "https"]):
             return False
@@ -96,15 +102,21 @@ def is_valid(url):
         if not any(parsed.netloc.endswith(domain) for domain in valid_domains):
             return False
         
-        return not re.match(
-            r".*\.(css|js|bmp|gif|jpe?g|ico"
-            + r"|png|tiff?|mid|mp2|mp3|mp4"
-            + r"|wav|avi|mov|mpeg|ram|m4v|mkv|ogg|ogv|pdf"
-            + r"|ps|eps|tex|ppt|pptx|doc|docx|xls|xlsx|names"
-            + r"|data|dat|exe|bz2|tar|msi|bin|7z|psd|dmg|iso"
-            + r"|epub|dll|cnf|tgz|sha1"
-            + r"|thmx|mso|arff|rtf|jar|csv"
-            + r"|rm|smil|wmv|swf|wma|zip|rar|gz)$", parsed.path.lower())
+        # Exclude URLs that contain "uploads"
+        if "uploads" in parsed.path.lower():  # Check if "uploads" is part of the URL path
+            return False
+        
+        if re.match(r".*" + file_extensions, parsed.path.lower()):
+            return False
+        
+        # Check the query string for image file extensions (e.g., image=someimage.png)
+        query_params = parse_qs(parsed.query)
+        for param, value in query_params.items():
+            for v in value:
+                if re.match(r".*" + file_extensions, v.lower()):  # Check for image extensions in the query
+                    return False
+        
+        return True
 
     except TypeError:
         print ("TypeError for ", parsed)

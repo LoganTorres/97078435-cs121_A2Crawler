@@ -2,6 +2,7 @@ from threading import Thread
 from inspect import getsource
 from utils.download import download
 from utils import get_logger
+import urllib
 from urllib.parse import urlparse
 from urllib.robotparser import RobotFileParser
 from bs4 import BeautifulSoup
@@ -80,12 +81,10 @@ class Worker(Thread):
                 self.logger.info("Frontier is empty. Stopping Crawler.")
                 break
 
-            # Get current domain
-            start = tbd_url.find("//")
-            urlDomain = tbd_url[:tbd_url.find("/", start + 2)]
 
-            # Parse URL
+            # Get current domain
             parsed_url = urlparse(tbd_url)
+            urlDomain = f"{parsed_url.scheme}://{parsed_url.netloc}"
 
             # Get the authority and path to compare (for traps)
             parent_path = "/".join(parsed_url.path.split("/")[:-1])
@@ -101,7 +100,11 @@ class Worker(Thread):
             # If the domain changes (or is None), then get the robots.txt file for the new domain!
             if((currentDomain == None) or (currentDomain != urlDomain)):
                 robotFileParser.set_url(urlDomain + "/robots.txt") # Get the robots.txt file from the domain in which 'tbd_url' is from
-                robotFileParser.read() # Parse content from robots.txt so that we can check if the crawler may crawl 'tbd_url'
+                self.logger.info(f"Fetching robots.txt from: {urlDomain}")
+                try:
+                    robotFileParser.read() # Parse content from robots.txt so that we can check if the crawler may crawl 'tbd_url'
+                except urllib.error.URLError as e:
+                    self.logger.warning(f"robots.txt not found for {urlDomain}, assuming all URLs are allowed.")
                 currentDomain = urlDomain
 
                 # get crawl delay and if it exits then use that delay, else just use 1 (default delay)!
@@ -129,14 +132,18 @@ class Worker(Thread):
                 f"using cache {self.config.cache_server}.")
             
             is_near_duplicate = False
-            fingerprint = self._getFingerprint(resp)
-            # Calculate the Hamming distance to each existing fingerprint
-            for fp in self._fingerprints:
-                distance = sum(1 for b1, b2 in zip(fp, fingerprint) if b1 != b2)
-                # If distance is small enough, count as duplicate
-                if distance < 20: #IDK WHAT TO ACTUALLY PUT HERE
-                    is_near_duplicate = True
-                    break
+            fingerprint = self._getFingerprint(resp, tbd_url)
+            
+            if len(self._fingerprints) != 0:
+                # Calculate the Hamming distance to each existing fingerprint
+                for fp in self._fingerprints:
+                    distance = sum(1 for b1, b2 in zip(fp, fingerprint) if b1 != b2)
+                    # If distance is small enough, count as duplicate
+                    if distance < 15: #IDK WHAT TO ACTUALLY PUT HERE
+                        is_near_duplicate = True
+                        break
+            else:
+                self._fingerprints.add(fingerprint)
 
             if not is_near_duplicate:
                 for scraped_url in scraper.scraper(tbd_url, resp): # adding URLs to the frontier
@@ -146,7 +153,7 @@ class Worker(Thread):
             time.sleep(self.config.time_delay) # Delay for politeness
 
 
-    def _getFingerprint(self, resp): # SimHash
+    def _getFingerprint(self, resp, tbd_url): # SimHash
         """
         Create a finger print for the given response 'resp'
 
@@ -157,14 +164,14 @@ class Worker(Thread):
         Returns a fingerprint which is used for determining near duplication with other fingerprints in self._fingerprints
         """
 
-        webContent = BeautifulSoup(resp.raw_response.content, "html.parser").get_text()
+        webContent = BeautifulSoup(resp.raw_response.content, "html.parser").get_text(separator=" ", strip=True)
 
 
         # Get all the tokens on a page (to track length)
         tokens = [token for token in tokenize(webContent)] 
         # If length is larger than current longest, update
         if len(tokens) > self.longest_page[1]:
-            self.longest_page=(resp.url, len(tokens))
+            self.longest_page=(tbd_url, len(tokens))
 
         # Initialize the vector to represent the fingerprint (128 bits)
         vector = [0] * 128
@@ -196,7 +203,7 @@ class Worker(Thread):
 
         return fingerprint
 
-def tokenize(path: str) -> list[str]: # can replace with someone else's
+def tokenize(text: str) -> list[str]: # can replace with someone else's
     '''
     Reads a text file and returns a list of alphanumeric tokens in that file.
 
@@ -205,16 +212,11 @@ def tokenize(path: str) -> list[str]: # can replace with someone else's
     '''
     tokens = []
     try:
-        # Open the file, replacing improperly encoded chars with placeholder
-        with open(path, 'r', encoding='utf-8', errors='replace') as file:
-            for line in file:
-                # Convert to lowercase, get list of substrings matching regex pattern
-                line_tokens = re.findall(r'[a-zA-Z0-9]+', line.lower())
-                # Add the new tokens to the tokens object
-                tokens.extend(line_tokens)
-    except FileNotFoundError:
-        print(f"Error: File '{path}' not found.")
+        # Convert the text to lowercase and get a list of alphanumeric tokens using regex
+        line_tokens = re.findall(r'[a-zA-Z0-9]+', text.lower())
+        # Add the new tokens to the tokens list
+        tokens.extend(line_tokens)
     except Exception as e:
-        print(f"Error while processing file: {e}.")
+        print(f"Error while processing text: {e}.")
 
     return tokens
