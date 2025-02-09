@@ -3,9 +3,11 @@ from inspect import getsource
 from utils.download import download
 from utils import get_logger
 from urllib.robotparser import RobotFileParser
-# from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup
 import scraper
 import time
+import re
+import hashlib
 
 class Worker(Thread):
     def __init__(self, worker_id, config, frontier): # GOOD
@@ -22,7 +24,7 @@ class Worker(Thread):
         self.config = config
         self.frontier = frontier
         self._visitedURLS = set() # To avoid entering the same URLs (exact duplication check)
-        # self._fingerprints = set() # Use to store the fingerprints which is used for near duplication detection!
+        self._fingerprints = set() # Use to store the fingerprints which is used for near duplication detection!
 
         # basic check for requests in scraper
         assert {getsource(scraper).find(req) for req in {"from requests import", "import requests"}} == {-1}, "Do not use requests in scraper.py"
@@ -71,39 +73,87 @@ class Worker(Thread):
                 f"Downloaded {tbd_url}, status <{resp.status}>, "
                 f"using cache {self.config.cache_server}.")
             
-            # fingerPrint = self._getFingerprint(resp)
-           
-            # # If not a near duplication, then scrap and extract valid next URLs and place in froniter!
-            # if(not (fingerPrint in self._fingerprints)):
-            #     self._fingerprints.add(fingerPrint)
+            is_near_duplicate = False
+            fingerprint = self._getFingerprint(resp)
+            # Calculate the Hamming distance to each existing fingerprint
+            for fp in self._fingerprints:
+                distance = sum(1 for b1, b2 in zip(fp, fingerprint) if b1 != b2)
+                # If distance is small enough, count as duplicate
+                if distance < 20: #IDK WHAT TO ACTUALLY PUT HERE
+                    is_near_duplicate = True
+                    break
 
-            for scraped_url in scraper.scraper(tbd_url, resp): # adding URLs to the frontier
-                self.frontier.add_url(scraped_url)
+            if not is_near_duplicate:
+                for scraped_url in scraper.scraper(tbd_url, resp): # adding URLs to the frontier
+                    self.frontier.add_url(scraped_url)
                 
             self.frontier.mark_url_complete(tbd_url)
             time.sleep(self.config.time_delay) # Delay for politeness
 
-    # @classmethod
-    # def _getFingerprint(resp): # [WIP]
-    #     """
-    #     Class method that simply gets create a finger print for the given response 'resp'
+    @classmethod
+    def _getFingerprint(resp): # SimHash
+        """
+        Class method that simply gets create a finger print for the given response 'resp'
 
-    #     @Parameters:
-    #     resp - The response from the cache server which is used to create the fingerprint for near duplication detection
+        @Parameters:
+        resp - The response from the cache server which is used to create the fingerprint for near duplication detection
 
-    #     @Returns:
-    #     Returns a fingerprint which is used for determining near duplication with other fingerprints in self._fingerprints
-    #     """
+        @Returns:
+        Returns a fingerprint which is used for determining near duplication with other fingerprints in self._fingerprints
+        """
 
-    #     webContent = BeautifulSoup(resp.raw_response.content, "html.parser").get_text()
+        webContent = BeautifulSoup(resp.raw_response.content, "html.parser").get_text()
 
-    #     # Some stopping words (I think small set like this should be fine)
-    #     stoppingWords = {"the", "of", "a", "how", "when", "at", "is", "to"}
+        # Some stopping words (I think small set like this should be fine)
+        stoppingWords = {"the", "of", "a", "how", "when", "at", "is", "to"}
 
-    #     # Will remove the HTML in 'resp' and tokenize the content while filtering out stopping words
-    #     tokens = [token for token in tokenize(webContent) if not (token in stoppingWords)] 
-    #     # TODO:                replace ^^^ "tokenize" with the name of the tokenize function from A1
-    #     tokens = [hash(token) for token in tokens]
+        # Will remove the HTML in 'resp' and tokenize the content while filtering out stopping words
+        tokens = [token for token in tokenize(webContent) if not (token in stoppingWords)] 
 
-    #     selectedTokens = [select min tokens]
+        # Initialize the vector to represent the fingerprint (128 bits)
+        vector = [0] * 128
 
+        for token in tokens:
+            # Get the hash value for each token
+            token_hash = hashlib.md5(token.encode('utf-8')).hexdigest()
+            # Convert hash to binary (this will be a string of 128 characters '0' or '1')
+            hash_bits = bin(int(token_hash, 16))[2:].zfill(128)
+
+            # Update the vector based on the hash bits
+            for i, bit in enumerate(hash_bits):
+                # If the bit is '1', increment the corresponding dimension of the vector, else decrement it
+                if bit == '1':
+                    vector[i] += 1
+                else:
+                    vector[i] -= 1
+
+        # Create the final SimHash by converting the vector into a binary string
+        simhash = ''.join(['1' if x > 0 else '0' for x in vector])
+
+        # Convert the binary string into a hexadecimal string (the final fingerprint)
+        fingerprint = format(int(simhash, 2), '032x')
+
+        return fingerprint
+
+def tokenize(path: str) -> list[str]: # can replace with someone else's
+    '''
+    Reads a text file and returns a list of alphanumeric tokens in that file.
+
+    Runtime Complexity:
+    O(n) where n is the number of characters in a file.
+    '''
+    tokens = []
+    try:
+        # Open the file, replacing improperly encoded chars with placeholder
+        with open(path, 'r', encoding='utf-8', errors='replace') as file:
+            for line in file:
+                # Convert to lowercase, get list of substrings matching regex pattern
+                line_tokens = re.findall(r'[a-zA-Z0-9]+', line.lower())
+                # Add the new tokens to the tokens object
+                tokens.extend(line_tokens)
+    except FileNotFoundError:
+        print(f"Error: File '{path}' not found.")
+    except Exception as e:
+        print(f"Error while processing file: {e}.")
+
+    return tokens
