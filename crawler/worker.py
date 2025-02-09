@@ -2,12 +2,38 @@ from threading import Thread
 from inspect import getsource
 from utils.download import download
 from utils import get_logger
+from urllib.parse import urlparse
 from urllib.robotparser import RobotFileParser
 from bs4 import BeautifulSoup
+from collections import Counter, defaultdict
 import scraper
 import time
 import re
 import hashlib
+
+"""
+https://ics.uci.edu/events/month/2050-01/
+^ Format of the ics calendar. Need to deal with the infinite loop
+What I did was keep track of the parent paths (ex: https://ics.uci.edu/events/month/) and if the count exceeds the max then it is disregarded
+"""
+
+MAX_URL_LIMIT = 100 # NOT SURE IF THIS IS A GOOD NUMBER
+STOPWORDS = [
+    "a", "about", "above", "after", "again", "against", "all", "am", "an", "and", "any", "are", "aren't",
+    "as", "at", "be", "because", "been", "before", "being", "below", "between", "both", "but", "by", "can't",
+    "cannot", "could", "couldn't", "did", "didn't", "do", "does", "doesn't", "doing", "don't", "down", "during",
+    "each", "few", "for", "from", "further", "had", "hadn't", "has", "hasn't", "have", "haven't", "having", "he",
+    "he'd", "he'll", "he's", "her", "here", "here's", "hers", "herself", "him", "himself", "his", "how", "how's",
+    "i", "i'd", "i'll", "i'm", "i've", "if", "in", "into", "is", "isn't", "it", "it's", "its", "itself", "let's",
+    "me", "more", "most", "mustn't", "my", "myself", "no", "nor", "not", "of", "off", "on", "once", "only", "or",
+    "other", "ought", "our", "ours", "ourselves", "out", "over", "own", "same", "shan't", "she", "she'd", "she'll",
+    "she's", "should", "shouldn't", "so", "some", "such", "than", "that", "that's", "the", "their", "theirs", "them",
+    "themselves", "then", "there", "there's", "these", "they", "they'd", "they'll", "they're", "they've", "this",
+    "those", "through", "to", "too", "under", "until", "up", "very", "was", "wasn't", "we", "we'd", "we'll", "we're",
+    "we've", "were", "weren't", "what", "what's", "when", "when's", "where", "where's", "which", "while", "who",
+    "who's", "whom", "why", "why's", "with", "won't", "would", "wouldn't", "you", "you'd", "you'll", "you're", "you've",
+    "your", "yours", "yourself", "yourselves"
+]
 
 class Worker(Thread):
     def __init__(self, worker_id, config, frontier): # GOOD
@@ -23,8 +49,14 @@ class Worker(Thread):
         self.logger = get_logger(f"Worker-{worker_id}", "Worker")
         self.config = config
         self.frontier = frontier
-        self._visitedURLS = set() # To avoid entering the same URLs (exact duplication check)
         self._fingerprints = set() # Use to store the fingerprints which is used for near duplication detection!
+        self.visited_authority_paths = {}  # Tracks the number of URLs visited per authority-path 
+
+        # For the report:
+        self.visited_urls = set() # To avoid entering the same URLs and track # of unique URLs
+        self.longest_page = ("", 0) # Track URL and word count of longest page
+        self.word_counter = Counter()
+        self. subdomain_counter = defaultdict(set)
 
         # basic check for requests in scraper
         assert {getsource(scraper).find(req) for req in {"from requests import", "import requests"}} == {-1}, "Do not use requests in scraper.py"
@@ -52,6 +84,20 @@ class Worker(Thread):
             start = tbd_url.find("//")
             urlDomain = tbd_url[:tbd_url.find("/", start + 2)]
 
+            # Parse URL
+            parsed_url = urlparse(tbd_url)
+
+            # Get the authority and path to compare (for traps)
+            parent_path = "/".join(parsed_url.path.split("/")[:-1])
+            authority_path = (parsed_url.netloc, parent_path)  # Tuple of (domain, path)
+
+            #Subdomain processing
+            netloc = parsed_url.netloc
+            subdomain = netloc.split(".")[0]  # Extract subdomain (if any)
+            # Check if the domain is ics.uci.edu and add the URL to the subdomain set
+            if "ics.uci.edu" in netloc:
+                self.subdomain_counter[subdomain].add(tbd_url)
+
             # If the domain changes (or is None), then get the robots.txt file for the new domain!
             if((currentDomain == None) or (currentDomain != urlDomain)):
                 robotFileParser.set_url(urlDomain + "/robots.txt") # Get the robots.txt file from the domain in which 'tbd_url' is from
@@ -64,9 +110,18 @@ class Worker(Thread):
 
             # If we've visited the URL before then ignore it and move on to the next URL!
             # Additionally check if we can crawl the URL (not doing so will surely lead to a crawler trap!)
-            if((tbd_url in self._visitedURLS) or not robotFileParser.can_fetch(self.config.user_agent, tbd_url)): continue
+            if((tbd_url in self.visited_urls) or not robotFileParser.can_fetch(self.config.user_agent, tbd_url)): continue
 
-            self._visitedURLS.add(tbd_url) # Add to visited URLs set!
+            # Check the number of URLs visited for this authority-path pair
+            if authority_path not in self.visited_authority_paths:
+                self.visited_authority_paths[authority_path] = 0
+            
+            # If the limit is exceeded, skip this URL
+            if self.visited_authority_paths[authority_path] >= MAX_URL_LIMIT:
+                self.logger.info(f"Skipping URL {tbd_url} due to max limit for authority-path pair.")
+                continue
+
+            self.visited_urls.add(tbd_url) # Add to visited URLs set!
 
             resp = download(tbd_url, self.config, self.logger) # Requests for page/resource and will download it (which in the real-world would be saved in the document store)
             self.logger.info(
@@ -90,10 +145,10 @@ class Worker(Thread):
             self.frontier.mark_url_complete(tbd_url)
             time.sleep(self.config.time_delay) # Delay for politeness
 
-    @classmethod
-    def _getFingerprint(resp): # SimHash
+
+    def _getFingerprint(self, resp): # SimHash
         """
-        Class method that simply gets create a finger print for the given response 'resp'
+        Create a finger print for the given response 'resp'
 
         @Parameters:
         resp - The response from the cache server which is used to create the fingerprint for near duplication detection
@@ -104,16 +159,22 @@ class Worker(Thread):
 
         webContent = BeautifulSoup(resp.raw_response.content, "html.parser").get_text()
 
-        # Some stopping words (I think small set like this should be fine)
-        stoppingWords = {"the", "of", "a", "how", "when", "at", "is", "to"}
 
-        # Will remove the HTML in 'resp' and tokenize the content while filtering out stopping words
-        tokens = [token for token in tokenize(webContent) if not (token in stoppingWords)] 
+        # Get all the tokens on a page (to track length)
+        tokens = [token for token in tokenize(webContent)] 
+        # If length is larger than current longest, update
+        if len(tokens) > self.longest_page[1]:
+            self.longest_page=(resp.url, len(tokens))
 
         # Initialize the vector to represent the fingerprint (128 bits)
         vector = [0] * 128
 
         for token in tokens:
+            # Disregard stopwords
+            if token in STOPWORDS:
+                next
+            self.word_counter.update(token)
+
             # Get the hash value for each token
             token_hash = hashlib.md5(token.encode('utf-8')).hexdigest()
             # Convert hash to binary (this will be a string of 128 characters '0' or '1')
