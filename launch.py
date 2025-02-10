@@ -13,6 +13,10 @@ def main(config_file, restart):
     config.cache_server = get_cache_server(config, restart)
     crawler = Crawler(config, restart)
     crawler.start()
+    print(f"{len(crawler.visited_urls)} unique pages found.")
+    print(f"{crawler.longest_page[0]} was the longest page with {crawler.longest_page[1]} words.")
+    print(f"Top 50 Words: {list(crawler.word_counter.most_common(50))}")
+    print(f"Found {len(crawler.subdomains)} in ics.uci.edu: {crawler.subdomains}")
 
 
 if __name__ == "__main__":

@@ -2,30 +2,11 @@ import re
 from urllib.parse import urlparse, urljoin, urldefrag, parse_qs
 from bs4 import BeautifulSoup
 
-# top_50_words = 0
-# most_words = 0
-# most_words_page = ""
+MIN_LEN = 600
 
 def scraper(url, resp):
     links = extract_next_links(url, resp)
     valid_links = [link for link in links if is_valid(link)]
-
-    # #these functions should work right? since the frontier explores all the possible valid links and doesn't repeat them
-    # current_50 = get_most_common_words(resp.raw_response.content)
-    # current_most_words = get_word_count(resp.raw_response.content)
-    # get_ics_subdomains(url)
-    # get_unique_pages(url)
-
-    # if current_50 > top_50_words:#update the list
-    #     top_50_words = current_50
-    
-    # if current_most_words > most_words:
-    #     most_words = current_most_words
-    #     most_words_page = url
-    # #print(top_50_words)
-    # #print(most_words)
-    # #print(unique_pages_counter)
-    # #print(ics_subdomains)n
         
     return valid_links
 
@@ -44,7 +25,7 @@ def extract_next_links(url, resp):
     valid_links = []
 
     # Check if status of page is 200, if not print the error message
-    if resp.status != 200:
+    if resp.status >= 400 or resp.status < 200:
         print(f'Error: Recieved status {resp.status}.')
         return []
     
@@ -62,6 +43,11 @@ def extract_next_links(url, resp):
     
     # Parse the HTML content of the page
     soup = BeautifulSoup(resp.raw_response.content, "lxml")
+
+    # Avoid files with little content
+    text = soup.get_text(separator=" ", strip=True)
+    if len(text) < MIN_LEN:
+        return []
 
     # Find all anchor tags that contain an href (specifies hyperlink) attribute
     all_links = soup.find_all('a', href=True)
@@ -90,7 +76,7 @@ def is_valid(url):
                           r"wav|avi|mov|mpeg|ram|m4v|mkv|ogg|ogv|pdf|ps|eps|tex|ppt|pptx|doc|"
                           r"docx|xls|xlsx|names|data|dat|exe|bz2|tar|msi|bin|7z|psd|dmg|iso|"
                           r"epub|dll|cnf|tgz|sha1|thmx|mso|arff|rtf|jar|csv|rm|smil|wmv|swf|"
-                          r"wma|zip|rar|gz)$" )
+                          r"wma|zip|rar|gz|war)$" )
         
         parsed = urlparse(url)
         if parsed.scheme not in set(["http", "https"]):
@@ -102,10 +88,12 @@ def is_valid(url):
         if not any(parsed.netloc.endswith(domain) for domain in valid_domains):
             return False
         
-        # Exclude URLs that contain "uploads"
-        if "uploads" in parsed.path.lower():  # Check if "uploads" is part of the URL path
+        # Exclude "uploads", "files", or known low-information-value pages
+        low_value_patterns = ["uploads", "files", "sort=", "filter=", "ref=", "session_id="]
+        if any(pattern in parsed.path.lower() or pattern in parsed.query.lower() for pattern in low_value_patterns):
             return False
         
+        # Exclude file extension as a path
         if re.match(r".*" + file_extensions, parsed.path.lower()):
             return False
         

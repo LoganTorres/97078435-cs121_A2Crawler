@@ -51,13 +51,13 @@ class Worker(Thread):
         self.config = config
         self.frontier = frontier
         self._fingerprints = set() # Use to store the fingerprints which is used for near duplication detection!
-        self.visited_authority_paths = {}  # Tracks the number of URLs visited per authority-path 
+        self.visited_authority_paths = defaultdict(int)  # Tracks the number of URLs visited per authority-path 
 
         # For the report:
         self.visited_urls = set() # To avoid entering the same URLs and track # of unique URLs
         self.longest_page = ("", 0) # Track URL and word count of longest page
         self.word_counter = Counter()
-        self. subdomain_counter = defaultdict(set)
+        self.subdomains = set()
 
         # basic check for requests in scraper
         assert {getsource(scraper).find(req) for req in {"from requests import", "import requests"}} == {-1}, "Do not use requests in scraper.py"
@@ -87,15 +87,14 @@ class Worker(Thread):
             urlDomain = f"{parsed_url.scheme}://{parsed_url.netloc}"
 
             # Get the authority and path to compare (for traps)
-            parent_path = "/".join(parsed_url.path.split("/")[:-1])
-            authority_path = (parsed_url.netloc, parent_path)  # Tuple of (domain, path)
+            url_key = parsed_url.netloc + parsed_url.path.rstrip("/")
 
             #Subdomain processing
             netloc = parsed_url.netloc
             subdomain = netloc.split(".")[0]  # Extract subdomain (if any)
             # Check if the domain is ics.uci.edu and add the URL to the subdomain set
             if "ics.uci.edu" in netloc:
-                self.subdomain_counter[subdomain].add(tbd_url)
+                self.subdomains.add(tbd_url)
 
             # If the domain changes (or is None), then get the robots.txt file for the new domain!
             if((currentDomain == None) or (currentDomain != urlDomain)):
@@ -116,12 +115,13 @@ class Worker(Thread):
             if((tbd_url in self.visited_urls) or not robotFileParser.can_fetch(self.config.user_agent, tbd_url)): continue
 
             # Check the number of URLs visited for this authority-path pair
-            if authority_path not in self.visited_authority_paths:
-                self.visited_authority_paths[authority_path] = 0
+            self.visited_authority_paths[url_key] += 1
             
             # If the limit is exceeded, skip this URL
-            if self.visited_authority_paths[authority_path] >= MAX_URL_LIMIT:
-                self.logger.info(f"Skipping URL {tbd_url} due to max limit for authority-path pair.")
+            if self.visited_authority_paths[url_key] >= MAX_URL_LIMIT:
+                self.logger.info(f"Skipping URL {tbd_url} due to max limit for parent path.")
+                self.frontier.mark_url_complete(tbd_url)
+                time.sleep(self.config.time_delay) # Delay for politeness
                 continue
 
             self.visited_urls.add(tbd_url) # Add to visited URLs set!
@@ -131,6 +131,12 @@ class Worker(Thread):
                 f"Downloaded {tbd_url}, status <{resp.status}>, "
                 f"using cache {self.config.cache_server}.")
             
+            # Don't process bad status
+            if 400 <= resp.status:
+                self.frontier.mark_url_complete(tbd_url)
+                time.sleep(self.config.time_delay) # Delay for politeness
+                continue
+            
             is_near_duplicate = False
             fingerprint = self._getFingerprint(resp, tbd_url)
             
@@ -139,7 +145,7 @@ class Worker(Thread):
                 for fp in self._fingerprints:
                     distance = sum(1 for b1, b2 in zip(fp, fingerprint) if b1 != b2)
                     # If distance is small enough, count as duplicate
-                    if distance < 15: #IDK WHAT TO ACTUALLY PUT HERE
+                    if distance < 20: #IDK WHAT TO ACTUALLY PUT HERE
                         is_near_duplicate = True
                         break
             else:
@@ -165,7 +171,6 @@ class Worker(Thread):
         """
 
         webContent = BeautifulSoup(resp.raw_response.content, "html.parser").get_text(separator=" ", strip=True)
-
 
         # Get all the tokens on a page (to track length)
         tokens = [token for token in tokenize(webContent)] 
