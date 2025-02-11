@@ -81,7 +81,6 @@ class Worker(Thread):
                 self.logger.info("Frontier is empty. Stopping Crawler.")
                 break
 
-
             # Get current domain
             parsed_url = urlparse(tbd_url)
             urlDomain = f"{parsed_url.scheme}://{parsed_url.netloc}"
@@ -144,8 +143,8 @@ class Worker(Thread):
                 # Calculate the Hamming distance to each existing fingerprint
                 for fp in self._fingerprints:
                     distance = sum(1 for b1, b2 in zip(fp, fingerprint) if b1 != b2)
-                    # If distance is small enough, count as duplicate
-                    if distance < 20: #IDK WHAT TO ACTUALLY PUT HERE
+                    # If distance is small enough, count as near duplicate
+                    if distance <= 3:
                         is_near_duplicate = True
                         break
             else:
@@ -183,8 +182,7 @@ class Worker(Thread):
 
         for token in tokens:
             # Disregard stopwords
-            if token in STOPWORDS:
-                next
+            if token in STOPWORDS: continue
             self.word_counter.update(token)
 
             # Get the hash value for each token
