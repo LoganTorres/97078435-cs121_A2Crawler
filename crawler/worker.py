@@ -12,13 +12,6 @@ import time
 import re
 import hashlib
 
-"""
-https://ics.uci.edu/events/month/2050-01/
-^ Format of the ics calendar. Need to deal with the infinite loop
-What I did was keep track of the parent paths (ex: https://ics.uci.edu/events/month/) and if the count exceeds the max then it is disregarded
-"""
-
-MAX_URL_LIMIT = 100 # NOT SURE IF THIS IS A GOOD NUMBER
 STOPWORDS = [
     "a", "about", "above", "after", "again", "against", "all", "am", "an", "and", "any", "are", "aren't",
     "as", "at", "be", "because", "been", "before", "being", "below", "between", "both", "but", "by", "can't",
@@ -51,13 +44,12 @@ class Worker(Thread):
         self.config = config
         self.frontier = frontier
         self._fingerprints = set() # Use to store the fingerprints which is used for near duplication detection!
-        self.visited_authority_paths = defaultdict(int)  # Tracks the number of URLs visited per authority-path 
 
         # For the report:
         self.visited_urls = set() # To avoid entering the same URLs and track # of unique URLs
         self.longest_page = ("", 0) # Track URL and word count of longest page
         self.word_counter = Counter()
-        self.subdomains = set()
+        self.subdomains = defaultdict(set())
 
         # basic check for requests in scraper
         assert {getsource(scraper).find(req) for req in {"from requests import", "import requests"}} == {-1}, "Do not use requests in scraper.py"
@@ -85,15 +77,11 @@ class Worker(Thread):
             parsed_url = urlparse(tbd_url)
             urlDomain = f"{parsed_url.scheme}://{parsed_url.netloc}"
 
-            # Get the authority and path to compare (for traps)
-            url_key = parsed_url.netloc + parsed_url.path.rstrip("/")
-
             #Subdomain processing
             netloc = parsed_url.netloc
-            subdomain = netloc.split(".")[0]  # Extract subdomain (if any)
             # Check if the domain is ics.uci.edu and add the URL to the subdomain set
             if "ics.uci.edu" in netloc:
-                self.subdomains.add(tbd_url)
+                self.subdomains[netloc].add(tbd_url)
 
             # If the domain changes (or is None), then get the robots.txt file for the new domain!
             if((currentDomain == None) or (currentDomain != urlDomain)):
@@ -113,16 +101,6 @@ class Worker(Thread):
             # Additionally check if we can crawl the URL (not doing so will surely lead to a crawler trap!)
             if((tbd_url in self.visited_urls) or not robotFileParser.can_fetch(self.config.user_agent, tbd_url)): continue
 
-            # Check the number of URLs visited for this authority-path pair
-            self.visited_authority_paths[url_key] += 1
-            
-            # If the limit is exceeded, skip this URL
-            if self.visited_authority_paths[url_key] >= MAX_URL_LIMIT:
-                self.logger.info(f"Skipping URL {tbd_url} due to max limit for parent path.")
-                self.frontier.mark_url_complete(tbd_url)
-                time.sleep(self.config.time_delay) # Delay for politeness
-                continue
-
             self.visited_urls.add(tbd_url) # Add to visited URLs set!
 
             resp = download(tbd_url, self.config, self.logger) # Requests for page/resource and will download it (which in the real-world would be saved in the document store)
@@ -131,28 +109,25 @@ class Worker(Thread):
                 f"using cache {self.config.cache_server}.")
             
             # Don't process bad status
-            if 400 <= resp.status:
+            if resp.status >= 400 or resp.status <= 200:
                 self.frontier.mark_url_complete(tbd_url)
-                time.sleep(self.config.time_delay) # Delay for politeness
+                time.sleep(self.config.time_delay) # Delays since I alr downloaded
                 continue
             
             is_near_duplicate = False
-            fingerprint = self._getFingerprint(resp, tbd_url)
+            fingerprint = self._get_fingerprint(resp, tbd_url)
             
             if len(self._fingerprints) != 0:
                 # Calculate the Hamming distance to each existing fingerprint
                 for fp in self._fingerprints:
                     distance = sum(1 for b1, b2 in zip(fp, fingerprint) if b1 != b2)
                     # If distance is small enough, count as near duplicate
-                    if distance <= 3: # Changed to 3 since this the typical threshold or so for near duplicaton detection
+                    if distance <= 5:
                         is_near_duplicate = True
                         break
-                
-                self._fingerprints.add(fingerprint) # Not a near duplicate and added to the set
-            else:
-                self._fingerprints.add(fingerprint)
 
             if not is_near_duplicate:
+                self._fingerprints.add(fingerprint) #Avoid adding fingerprint if it was a duplicate of another
                 for scraped_url in scraper.scraper(tbd_url, resp): # adding URLs to the frontier
                     self.frontier.add_url(scraped_url)
                 
@@ -160,7 +135,7 @@ class Worker(Thread):
             time.sleep(self.config.time_delay) # Delay for politeness
 
 
-    def _getFingerprint(self, resp, tbd_url): # SimHash
+    def _get_fingerprint(self, resp, tbd_url): # SimHash
         """
         Create a finger print for the given response 'resp'
 
@@ -210,7 +185,7 @@ class Worker(Thread):
 
 def tokenize(text: str) -> list[str]: # can replace with someone else's
     '''
-    Reads a text file and returns a list of alphanumeric tokens in that file.
+    Reads text and returns a list of alphanumeric tokens in that file.
 
     Runtime Complexity:
     O(n) where n is the number of characters in a file.
