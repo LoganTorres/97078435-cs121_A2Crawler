@@ -144,9 +144,11 @@ class Worker(Thread):
                 for fp in self._fingerprints:
                     distance = sum(1 for b1, b2 in zip(fp, fingerprint) if b1 != b2)
                     # If distance is small enough, count as near duplicate
-                    if distance <= 3:
+                    if distance <= 3: # Changed to 3 since this the typical threshold or so for near duplicaton detection
                         is_near_duplicate = True
                         break
+                
+                self._fingerprints.add(fingerprint) # Not a near duplicate and added to the set
             else:
                 self._fingerprints.add(fingerprint)
 
