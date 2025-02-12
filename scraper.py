@@ -100,6 +100,10 @@ def is_valid(url):
         if any(pattern in parsed.path.lower() or pattern in parsed.query.lower() for pattern in low_value_patterns):
             return False
         
+        # Exclude large urls
+        if len(url) > 1000:
+            return False
+        
         '''
         File checks
         '''

@@ -108,8 +108,8 @@ class Worker(Thread):
                 f"Downloaded {tbd_url}, status <{resp.status}>, "
                 f"using cache {self.config.cache_server}.")
             
-            # Don't process bad status
-            if resp.status >= 400 or resp.status <= 200:
+            # Don't process bad status or no response
+            if resp.status >= 400 or resp.status <= 200 or resp.raw_response == None:
                 self.frontier.mark_url_complete(tbd_url)
                 time.sleep(self.config.time_delay) # Delays since I alr downloaded
                 continue
