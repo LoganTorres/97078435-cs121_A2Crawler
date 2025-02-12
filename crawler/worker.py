@@ -49,7 +49,7 @@ class Worker(Thread):
         self.visited_urls = set() # To avoid entering the same URLs and track # of unique URLs
         self.longest_page = ("", 0) # Track URL and word count of longest page
         self.word_counter = Counter()
-        self.subdomains = defaultdict(set())
+        self.subdomains = defaultdict(set)
 
         # basic check for requests in scraper
         assert {getsource(scraper).find(req) for req in {"from requests import", "import requests"}} == {-1}, "Do not use requests in scraper.py"
