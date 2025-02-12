@@ -80,7 +80,11 @@ class Worker(Thread):
             #Subdomain processing
             netloc = parsed_url.netloc
             # Check if the domain is ics.uci.edu and add the URL to the subdomain set
-            if "ics.uci.edu" in netloc:
+            # Extract the main domain by splitting at the last two parts
+            domain_parts = netloc.split(".")
+
+            # Ensure the domain is exactly "ics.uci.edu" or its subdomains
+            if len(domain_parts) >= 3 and domain_parts[-3] == "ics" and domain_parts[-2] == "uci" and domain_parts[-1] == "edu":
                 self.subdomains[netloc].add(tbd_url)
 
             # If the domain changes (or is None), then get the robots.txt file for the new domain!
