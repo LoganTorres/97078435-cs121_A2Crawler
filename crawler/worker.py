@@ -74,7 +74,7 @@ class Worker(Thread):
                 break
 
             # Get current domain
-            parsed_url = urlparse(tbd_url)
+            parsed_url = urlparse(url = tbd_url.replace(" ", ""))
             urlDomain = f"{parsed_url.scheme}://{parsed_url.netloc}"
 
             #Subdomain processing
@@ -109,7 +109,7 @@ class Worker(Thread):
                 f"using cache {self.config.cache_server}.")
             
             # Don't process bad status or no response
-            if resp.status >= 400 or resp.status <= 200 or resp.raw_response == None:
+            if resp.status >= 400 or resp.status < 200 or resp.raw_response == None:
                 self.frontier.mark_url_complete(tbd_url)
                 time.sleep(self.config.time_delay) # Delays since I alr downloaded
                 continue
