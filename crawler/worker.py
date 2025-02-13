@@ -105,8 +105,6 @@ class Worker(Thread):
             # Additionally check if we can crawl the URL (not doing so will surely lead to a crawler trap!)
             if((tbd_url in self.visited_urls) or not robotFileParser.can_fetch(self.config.user_agent, tbd_url)): continue
 
-            self.visited_urls.add(tbd_url) # Add to visited URLs set!
-
             resp = download(tbd_url, self.config, self.logger) # Requests for page/resource and will download it (which in the real-world would be saved in the document store)
             self.logger.info(
                 f"Downloaded {tbd_url}, status <{resp.status}>, "
@@ -134,7 +132,8 @@ class Worker(Thread):
                 self._fingerprints.add(fingerprint) #Avoid adding fingerprint if it was a duplicate of another
                 for scraped_url in scraper.scraper(tbd_url, resp): # adding URLs to the frontier
                     self.frontier.add_url(scraped_url)
-                
+            
+            self.visited_urls.add(tbd_url) # Add URL to set if it made it to this point
             self.frontier.mark_url_complete(tbd_url)
             time.sleep(self.config.time_delay) # Delay for politeness
 

@@ -6,11 +6,10 @@ from collections import defaultdict
 """
 https://ics.uci.edu/events/month/2050-01/
 ^ Format of the ics calendar. Need to deal with the infinite loop
-What I did was keep track of the parent paths (ex: https://ics.uci.edu/events/month/) and if the count exceeds the max then it is disregarded
 """
 
-MAX_URL_LIMIT = 100
-MIN_LEN = 600
+MIN_LEN = 500
+MAX_URL_LIMIT = 5000
 visited_parents = defaultdict(int) # [parent_url: count]
 
 def scraper(url, resp):
@@ -80,7 +79,15 @@ def is_valid(url):
                           r"docx|xls|xlsx|names|data|dat|exe|bz2|tar|msi|bin|7z|psd|dmg|iso|"
                           r"epub|dll|cnf|tgz|sha1|thmx|mso|arff|rtf|jar|csv|rm|smil|wmv|swf|"
                           r"wma|zip|rar|gz|war)$" )
-        file_extensions_common = r"(jpg|jpeg|png|gif|bmp|ico|pdf|doc|docx|ppt|pptx|xls|xlsx|txt|rtf|mp3|mp4|wav|ogg|avi|mov|wmv|zip|rar|tar|gz|7z|css|js|html|csv)"
+        file_extensions_common = r"(jpg|jpeg|png|gif|bmp|ico|pdf|docx|ppt|pptx|xls|xlsx|rtf|mp3|mp4|wav|ogg|avi|mov|wmv|rar|tar|gz|7z|csv)"
+        # Avoid calendar events (want to keep regular event pages)
+        # YYYY-MM-DD or YYYY/MM/DD
+        # YYYY-DD-MM or YYYY/DD/MM
+        # DD-MM-YYYY or DD/MM/YYYY
+        # MM-DD-YYYY or MM/DD/YYYY
+        # MM-YYYY or MM/YYYY
+        # YYYY-MM or YYYY/MM
+        date_pattern = r"(?=.*events)(?=.*(?:\d{4}[-/]\d{2}[-/]\d{2}|\d{2}[-/]\d{2}[-/]\d{4}|\d{2}[-/]\d{2}[-/]\d{4}|\d{2}[-/]\d{2}[-/]\d{4}|\d{2}[-/]\d{2}|\d{4}[-/]\d{2}))"
         
         parsed = urlparse(url)
         if parsed.scheme not in set(["http", "https"]):
@@ -96,7 +103,7 @@ def is_valid(url):
         Quality checks
         '''
         # Exclude "uploads", "files", or known low-information-value pages
-        low_value_patterns = ["uploads", "files", "sort=", "filter=", "ref=", "session_id=", "edit"]
+        low_value_patterns = ["uploads", "files", "sort=", "ref=", "session_id=", "edit", "login", "account_activation", "prefs", "ical", "calendar", "tribe-bar-date", "version="]
         if any(pattern in parsed.path.lower() or pattern in parsed.query.lower() for pattern in low_value_patterns):
             return False
         
@@ -111,19 +118,23 @@ def is_valid(url):
         if re.match(r".*" + file_extensions, parsed.path.lower()):
             return False
         
-        # Check the other parts for common file patterns
-        if re.search(file_extensions_common, url):
-            return False
+        # # Check the other parts for common file patterns
+        # if re.search(file_extensions_common, url):
+        #     return False
         '''
         Trap prevention
         '''
         # Get the parent URL by removing the last part of the path
-        parent_url = f"{parsed.netloc}{'/'.join(parsed.path.rstrip('/').split('/')[:-1])}"
-        # Check the number of URLs visited for this authority-path pair
-        visited_parents[parent_url] += 1
+        parent_url = f"{parsed.netloc}{'/'.join(part:=parsed.path.rstrip('/').split('/')[:-1])}"
+        if part != ['']:
+            # Check the number of URLs visited for this authority-path pair
+            visited_parents[parent_url] += 1
+            # If the limit is exceeded, skip this URL
+            if visited_parents[parent_url] >= MAX_URL_LIMIT:
+                return False
         
-        # If the limit is exceeded, skip this URL
-        if visited_parents[parent_url] >= MAX_URL_LIMIT:
+        # Check if there is event date pattern
+        if re.search(date_pattern, url):
             return False
         
         # Valid if bypassed all checks
