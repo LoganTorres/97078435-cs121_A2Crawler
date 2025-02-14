@@ -64,7 +64,7 @@ class Worker(Thread):
 
         # Robot parser so that we can read "robots.txt" for each URL's domain we get from the frontier
         robotFileParser = RobotFileParser()
-        currentDomain = None
+        checked_domains = set()
 
         while True:
             tbd_url = self.frontier.get_tbd_url() # Similar in a way as if we were "popping" from a queue
@@ -87,15 +87,15 @@ class Worker(Thread):
             if len(domain_parts) >= 3 and domain_parts[-3] == "ics" and domain_parts[-2] == "uci" and domain_parts[-1] == "edu":
                 self.subdomains[netloc].add(tbd_url)
 
-            # If the domain changes (or is None), then get the robots.txt file for the new domain!
-            if((currentDomain == None) or (currentDomain != urlDomain)):
+            # Check if the robots.txt has already been fetched for this domain
+            if urlDomain not in checked_domains:  
                 robotFileParser.set_url(urlDomain + "/robots.txt") # Get the robots.txt file from the domain in which 'tbd_url' is from
                 self.logger.info(f"Fetching robots.txt from: {urlDomain}")
                 try:
                     robotFileParser.read() # Parse content from robots.txt so that we can check if the crawler may crawl 'tbd_url'
                 except urllib.error.URLError as e:
                     self.logger.warning(f"robots.txt not found for {urlDomain}, assuming all URLs are allowed.")
-                currentDomain = urlDomain
+                checked_domains.add(urlDomain)  # Mark this domain as processed
 
                 # get crawl delay and if it exits then use that delay, else just use 1 (default delay)!
                 crawlDelay = robotFileParser.crawl_delay(self.config.user_agent)
@@ -103,7 +103,9 @@ class Worker(Thread):
 
             # If we've visited the URL before then ignore it and move on to the next URL!
             # Additionally check if we can crawl the URL (not doing so will surely lead to a crawler trap!)
-            if((tbd_url in self.visited_urls) or not robotFileParser.can_fetch(self.config.user_agent, tbd_url)): continue
+            if((tbd_url in self.visited_urls) or not robotFileParser.can_fetch(self.config.user_agent, tbd_url)):
+                self.frontier.mark_url_complete(tbd_url)
+                continue
 
             resp = download(tbd_url, self.config, self.logger) # Requests for page/resource and will download it (which in the real-world would be saved in the document store)
             self.logger.info(
@@ -125,6 +127,7 @@ class Worker(Thread):
                     distance = sum(1 for b1, b2 in zip(fp, fingerprint) if b1 != b2)
                     # If distance is small enough, count as near duplicate
                     if distance <= 5:
+                        print(f'Skipping {tbd_url} as its fingerprint is similar to another.')
                         is_near_duplicate = True
                         break
 
@@ -151,8 +154,13 @@ class Worker(Thread):
 
         webContent = BeautifulSoup(resp.raw_response.content, "html.parser").get_text(separator=" ", strip=True)
 
-        # Get all the tokens on a page (to track length)
-        tokens = [token for token in tokenize(webContent)] 
+        # Get all the tokens, and same tokens but without stopwords
+        tokens = tokenize(webContent)
+        tokens_no_stopwords = [token for token in tokens if token not in STOPWORDS]
+
+        # Update Counter - no stopwords
+        self.word_counter.update(tokens_no_stopwords)
+
         # If length is larger than current longest, update
         if len(tokens) > self.longest_page[1]:
             self.longest_page=(tbd_url, len(tokens))
@@ -160,11 +168,7 @@ class Worker(Thread):
         # Initialize the vector to represent the fingerprint (128 bits)
         vector = [0] * 128
 
-        for token in tokens:
-            # Disregard stopwords
-            if token in STOPWORDS: continue
-            self.word_counter.update(token)
-
+        for token in tokens_no_stopwords:
             # Get the hash value for each token
             token_hash = hashlib.md5(token.encode('utf-8')).hexdigest()
             # Convert hash to binary (this will be a string of 128 characters '0' or '1')

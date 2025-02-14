@@ -8,8 +8,8 @@ https://ics.uci.edu/events/month/2050-01/
 ^ Format of the ics calendar. Need to deal with the infinite loop
 """
 
-MIN_LEN = 500
-MAX_URL_LIMIT = 5000
+MIN_LEN = 200
+MAX_URL_LIMIT = 4000
 visited_parents = defaultdict(int) # [parent_url: count]
 
 def scraper(url, resp):
@@ -31,6 +31,7 @@ def extract_next_links(url, resp):
     Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
     '''
     abs_links = []
+    parsed = urlparse(url)
     
     # Detect redirects and use the final URL for crawling
     final_url = resp.url
@@ -50,6 +51,7 @@ def extract_next_links(url, resp):
     # Avoid files with little content
     text = soup.get_text(separator=" ", strip=True)
     if len(text) < MIN_LEN:
+        print(f"little content: {url}")
         return []
 
     # Find all anchor tags that contain an href (specifies hyperlink) attribute
@@ -57,6 +59,9 @@ def extract_next_links(url, resp):
 
     for link in all_links:
         href = link['href']
+        # Deal with the staff pages (ex https://ics.uci.edu/~iftekha/)
+        if len(parsed.path) ==1 and parsed.path.startswith('~') and url[-1] != '/':
+            url = url + '/'
         # Convert to absolute URLS (urljoin handles when href is already absolute)
         abs_url = urljoin(url, href)
         # Remove fragment
@@ -74,12 +79,14 @@ def is_valid(url):
     '''
     
     try:
-        file_extensions = ( r"\.(css|js|bmp|gif|jpe?g|ico|img|png|tiff?|mid|mp2|mp3|mp4|"
+        file_extensions = ( r".*\.(css|js|bmp|gif|jpe?g|ico|img|png|tiff?|mid|mp2|mp3|mp4|"
                           r"wav|avi|mov|mpeg|ram|m4v|mkv|ogg|ogv|pdf|ps|eps|tex|ppt|pptx|doc|"
                           r"docx|xls|xlsx|names|data|dat|exe|bz2|tar|msi|bin|7z|psd|dmg|iso|"
                           r"epub|dll|cnf|tgz|sha1|thmx|mso|arff|rtf|jar|csv|rm|smil|wmv|swf|"
-                          r"wma|zip|rar|gz|war)$" )
-        file_extensions_common = r"(jpg|jpeg|png|gif|bmp|ico|pdf|docx|ppt|pptx|xls|xlsx|rtf|mp3|mp4|wav|ogg|avi|mov|wmv|rar|tar|gz|7z|csv)"
+                          r"wma|zip|rar|gz|war|apk|mpg|bam|emx)$" )
+        file_extensions_common = r"(jpg|jpeg|png|gif|bmp|ico|pdf|docx|ppt|pptx|xls|xlsx|rtf|mp3|mp4|wav|avi|mov|wmv|rar|tar|gz|7z|csv)"
+        gitlab_avoids = ["commit", "compare", "tags", "blame", "merge_requests", "tree"]
+
         # Avoid calendar events (want to keep regular event pages)
         # YYYY-MM-DD or YYYY/MM/DD
         # YYYY-DD-MM or YYYY/DD/MM
@@ -103,24 +110,23 @@ def is_valid(url):
         Quality checks
         '''
         # Exclude "uploads", "files", or known low-information-value pages
-        low_value_patterns = ["uploads", "files", "sort=", "ref=", "session_id=", "edit", "login", "account_activation", "prefs", "ical", "calendar", "tribe-bar-date", "version="]
+        low_value_patterns = ["uploads", "files=", "sort=", "ref=", "session_id=", "edit", "login", "account_activation", "prefs", "ical", "calendar", "tribe-bar-date", "version=", "=diff"]
         if any(pattern in parsed.path.lower() or pattern in parsed.query.lower() for pattern in low_value_patterns):
             return False
-        
-        # Exclude large urls
-        if len(url) > 1000:
+        # Don't want individual commits from gitlab
+        if parsed.netloc == "gitlab.ics.uci.edu" and any(term in parsed.path for term in gitlab_avoids):
             return False
         
         '''
         File checks
         '''
-        # Exclude file extension as a path
-        if re.match(r".*" + file_extensions, parsed.path.lower()):
+        # Exclude file extensions
+        if re.match(file_extensions, parsed.path.lower()):
             return False
         
-        # # Check the other parts for common file patterns
-        # if re.search(file_extensions_common, url):
-        #     return False
+        # Check the other parts for common file patterns
+        if re.search(file_extensions_common, url):
+            return False
         '''
         Trap prevention
         '''
