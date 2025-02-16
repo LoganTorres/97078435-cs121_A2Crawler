@@ -9,7 +9,7 @@ https://ics.uci.edu/events/month/2050-01/
 """
 
 MIN_LEN = 200
-MAX_URL_LIMIT = 4000
+MAX_URL_LIMIT = 5000
 visited_parents = defaultdict(int) # [parent_url: count]
 
 def scraper(url, resp):
@@ -60,7 +60,7 @@ def extract_next_links(url, resp):
     for link in all_links:
         href = link['href']
         # Deal with the staff pages (ex https://ics.uci.edu/~iftekha/)
-        if len(parsed.path) ==1 and parsed.path.startswith('~') and url[-1] != '/':
+        if len(parsed.path.strip('/').split('/')) == 1 and parsed.path.startswith('/~') and url[-1] != '/':
             url = url + '/'
         # Convert to absolute URLS (urljoin handles when href is already absolute)
         abs_url = urljoin(url, href)
@@ -83,9 +83,11 @@ def is_valid(url):
                           r"wav|avi|mov|mpeg|ram|m4v|mkv|ogg|ogv|pdf|ps|eps|tex|ppt|pptx|doc|"
                           r"docx|xls|xlsx|names|data|dat|exe|bz2|tar|msi|bin|7z|psd|dmg|iso|"
                           r"epub|dll|cnf|tgz|sha1|thmx|mso|arff|rtf|jar|csv|rm|smil|wmv|swf|"
-                          r"wma|zip|rar|gz|war|apk|mpg|bam|emx)$" )
-        file_extensions_common = r"(jpg|jpeg|png|gif|bmp|ico|pdf|docx|ppt|pptx|xls|xlsx|rtf|mp3|mp4|wav|avi|mov|wmv|rar|tar|gz|7z|csv)"
-        gitlab_avoids = ["commit", "compare", "tags", "blame", "merge_requests", "tree"]
+                          r"wma|zip|rar|gz|war|apk|mpg|bam|emx|bib|shar|lif|ppsx|wvx|odc|pps)$" )
+        
+        gitlab_avoids = {"commit", "compare", "tags", "blame", "merge_requests", "tree"}
+        domain_avoids = {"containers.ics.uci.edu", "jujube.ics.uci.edu", "observium.ics.uci.edu", "chime.ics.uci.edu", 
+                        "dblp.ics.uci.edu", "checkmate.ics.uci.edu", "duke.ics.uci.edu", "contact.ics.uci.edu", "tippers.ics.uci.edu"}
 
         # Avoid calendar events (want to keep regular event pages)
         # YYYY-MM-DD or YYYY/MM/DD
@@ -110,27 +112,29 @@ def is_valid(url):
         Quality checks
         '''
         # Exclude "uploads", "files", or known low-information-value pages
-        low_value_patterns = ["uploads", "files=", "sort=", "ref=", "session_id=", "edit", "login", "account_activation", "prefs", "ical", "calendar", "tribe-bar-date", "version=", "=diff"]
+        low_value_patterns = ["uploads", "files=", "ref=", "session_id=", "=edit", "login", "account_activation", 
+        "prefs", "ical", "calendar", "tribe-bar-date", "version=", "=diff", "=download", "share="]
         if any(pattern in parsed.path.lower() or pattern in parsed.query.lower() for pattern in low_value_patterns):
             return False
         # Don't want individual commits from gitlab
         if parsed.netloc == "gitlab.ics.uci.edu" and any(term in parsed.path for term in gitlab_avoids):
             return False
+        # These domains are known to stall
+        if parsed.netloc in domain_avoids:
+            return False
         
         '''
         File checks
         '''
-        # Exclude file extensions
-        if re.match(file_extensions, parsed.path.lower()):
+        # Exclude file extensions in params and query
+        if re.match(file_extensions, parsed.path.lower()) or re.match(file_extensions, parsed.query.lower()):
             return False
         
-        # Check the other parts for common file patterns
-        if re.search(file_extensions_common, url):
-            return False
         '''
         Trap prevention
         '''
         # Get the parent URL by removing the last part of the path
+        # This is last resort as MAX_URL_LIMIT is very large!
         parent_url = f"{parsed.netloc}{'/'.join(part:=parsed.path.rstrip('/').split('/')[:-1])}"
         if part != ['']:
             # Check the number of URLs visited for this authority-path pair

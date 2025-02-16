@@ -44,12 +44,13 @@ class Worker(Thread):
         self.config = config
         self.frontier = frontier
         self._fingerprints = set() # Use to store the fingerprints which is used for near duplication detection!
+        self.robots_cache = {}
 
         # For the report:
         self.visited_urls = set() # To avoid entering the same URLs and track # of unique URLs
         self.longest_page = ("", 0) # Track URL and word count of longest page
-        self.word_counter = Counter()
-        self.subdomains = defaultdict(set)
+        self.word_counter = Counter() # Word counter across all pages
+        self.subdomains = defaultdict(int) # track ics.uci.edu subdomains
 
         # basic check for requests in scraper
         assert {getsource(scraper).find(req) for req in {"from requests import", "import requests"}} == {-1}, "Do not use requests in scraper.py"
@@ -62,10 +63,6 @@ class Worker(Thread):
         only stops once its empty
         """
 
-        # Robot parser so that we can read "robots.txt" for each URL's domain we get from the frontier
-        robotFileParser = RobotFileParser()
-        checked_domains = set()
-
         while True:
             tbd_url = self.frontier.get_tbd_url() # Similar in a way as if we were "popping" from a queue
             
@@ -73,37 +70,17 @@ class Worker(Thread):
                 self.logger.info("Frontier is empty. Stopping Crawler.")
                 break
 
-            # Get current domain
-            parsed_url = urlparse(url = tbd_url.replace(" ", ""))
-            urlDomain = f"{parsed_url.scheme}://{parsed_url.netloc}"
-
-            #Subdomain processing
+            # Get url parts
+            parsed_url = urlparse(tbd_url.replace(" ", ""))
+            scheme = parsed_url.scheme
             netloc = parsed_url.netloc
-            # Check if the domain is ics.uci.edu and add the URL to the subdomain set
-            # Extract the main domain by splitting at the last two parts
-            domain_parts = netloc.split(".")
 
-            # Ensure the domain is exactly "ics.uci.edu" or its subdomains
-            if len(domain_parts) >= 3 and domain_parts[-3] == "ics" and domain_parts[-2] == "uci" and domain_parts[-1] == "edu":
-                self.subdomains[netloc].add(tbd_url)
-
-            # Check if the robots.txt has already been fetched for this domain
-            if urlDomain not in checked_domains:  
-                robotFileParser.set_url(urlDomain + "/robots.txt") # Get the robots.txt file from the domain in which 'tbd_url' is from
-                self.logger.info(f"Fetching robots.txt from: {urlDomain}")
-                try:
-                    robotFileParser.read() # Parse content from robots.txt so that we can check if the crawler may crawl 'tbd_url'
-                except urllib.error.URLError as e:
-                    self.logger.warning(f"robots.txt not found for {urlDomain}, assuming all URLs are allowed.")
-                checked_domains.add(urlDomain)  # Mark this domain as processed
-
-                # get crawl delay and if it exits then use that delay, else just use 1 (default delay)!
-                crawlDelay = robotFileParser.crawl_delay(self.config.user_agent)
-                self.config.time_delay = crawlDelay or 1
+            # Construct robot url
+            robots_url = f"{scheme}://{netloc}/robots.txt"
 
             # If we've visited the URL before then ignore it and move on to the next URL!
-            # Additionally check if we can crawl the URL (not doing so will surely lead to a crawler trap!)
-            if((tbd_url in self.visited_urls) or not robotFileParser.can_fetch(self.config.user_agent, tbd_url)):
+            # Additionally check if we can crawl the URL
+            if((tbd_url in self.visited_urls) or not self._can_fetch(tbd_url, robots_url)):
                 self.frontier.mark_url_complete(tbd_url)
                 continue
 
@@ -117,6 +94,17 @@ class Worker(Thread):
                 self.frontier.mark_url_complete(tbd_url)
                 time.sleep(self.config.time_delay) # Delays since I alr downloaded
                 continue
+
+            '''
+            ics.uci.edu domain check (happens after all the previous checks)
+            '''
+            # Extract the main domain by splitting at the last two parts
+            domain_parts = netloc.split(".")
+            # Check if the domain is ics.uci.edu
+            if len(domain_parts) >= 3 and domain_parts[-3] == "ics" and domain_parts[-2] == "uci" and domain_parts[-1] == "edu":
+                subdom = f"{scheme}://{netloc}"
+                # Add 1 to subdomain count
+                self.subdomains[subdom] += 1
             
             is_near_duplicate = False
             fingerprint = self._get_fingerprint(resp, tbd_url)
@@ -140,8 +128,33 @@ class Worker(Thread):
             self.frontier.mark_url_complete(tbd_url)
             time.sleep(self.config.time_delay) # Delay for politeness
 
+    # Fetch or return cached RobotFileParser for a given URL.
+    def _get_parser(self, robots_url):
+        domain = urlparse(robots_url).netloc
+        if domain not in self.robots_cache:
+            # Use the provided download function instead of parser.read()
+            resp = download(robots_url, self.config, self.logger)
 
-    def _get_fingerprint(self, resp, tbd_url): # SimHash
+            parser = RobotFileParser()
+            # If good status and there is a response, parse with RobotFileParser
+            if resp.status == 200 and resp.raw_response:
+                parser.parse(resp.raw_response.text.splitlines())
+                print(f"Downloading robots.txt for {domain}")
+            # Otherwise, assume all urls allowed
+            else:
+                parser.allow_all = True
+                print(f"robots.txt not found for {domain}, assuming all URLs are allowed.")
+            self.robots_cache[domain] = parser
+            time.sleep(self.config.time_delay)
+        return self.robots_cache[domain]
+    
+    # Check if a URL is allowed for a given user agent.
+    def _can_fetch(self, target_url, robots_url):
+        parser = self._get_parser(robots_url)
+        return parser.can_fetch(self.config.user_agent, target_url)
+
+    # SimHash comparison
+    def _get_fingerprint(self, resp, tbd_url):
         """
         Create a finger print for the given response 'resp'
 

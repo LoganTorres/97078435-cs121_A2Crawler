@@ -21,19 +21,20 @@ class Crawler(object):
         self.start_async()
         self.join()
         with open("1.txt", "w", encoding="utf-8") as file:
-            file.write(worker.visited_urls)
-        with open("2-3.txt", "w", encoding="utf-8") as file:
-            file.write(worker.longest_page)
-            file.write(worker.word_counter)
+            file.write(f"{len(self.workers[0].visited_urls)} unique urls\n")
+            file.write(f"{self.workers[0].visited_urls}\n")
+        with open("2.txt", "w", encoding="utf-8") as file:
+            file.write(f"{self.workers[0].longest_page}\n")
+        with open("3.txt", "w", encoding="utf-8") as file:
+            file.write(f"{self.workers[0].word_counter}\n")
         with open("4.txt", "w", encoding="utf-8") as file:
-            file.write(worker.subdomains)
-        # with open("output.txt", "w", encoding="utf-8") as file:
-        #     for worker in self.workers:
-        #         file.write(f"{len(worker.visited_urls)} unique pages found.\n")
-        #         file.write(f"{worker.longest_page[0]} was the longest page with {worker.longest_page[1]} words.\n")
-        #         file.write(f"Top 50 Words: {list(worker.word_counter.most_common(50))}\n")
-        #         file.write(f"Found {len(worker.subdomains)} in ics.uci.edu: {worker.subdomains}\n")
-            
+            try: # in case i made an error
+                sorted_subdomains = sorted(self.workers[0].subdomains.keys())
+                for subdomain in sorted_subdomains:
+                    file.write(f"{subdomain}, {self.workers[0].subdomains[subdomain]}\n")
+            except:
+                pass
+            file.write(f"{self.workers[0].subdomains}\n")
 
     def join(self):
         for worker in self.workers:
