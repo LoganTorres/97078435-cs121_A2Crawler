@@ -109,7 +109,4 @@ venv.bak/
 *.full.py
 *.shelve
 
-test.py
-output1.txt
-Logs/
 bin/

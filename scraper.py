@@ -3,14 +3,7 @@ from urllib.parse import urlparse, urljoin, urldefrag, parse_qs
 from bs4 import BeautifulSoup
 from collections import defaultdict
 
-"""
-https://ics.uci.edu/events/month/2050-01/
-^ Format of the ics calendar. Need to deal with the infinite loop
-"""
-
 MIN_LEN = 200
-MAX_URL_LIMIT = 5000
-visited_parents = defaultdict(int) # [parent_url: count]
 
 def scraper(url, resp):
     links = extract_next_links(url, resp)
@@ -77,17 +70,16 @@ def is_valid(url):
     If you decide to crawl it, return True; otherwise return False.
     There are already some conditions that return False.
     '''
-    
     try:
         file_extensions = ( r".*\.(css|js|bmp|gif|jpe?g|ico|img|png|tiff?|mid|mp2|mp3|mp4|"
                           r"wav|avi|mov|mpeg|ram|m4v|mkv|ogg|ogv|pdf|ps|eps|tex|ppt|pptx|doc|"
                           r"docx|xls|xlsx|names|data|dat|exe|bz2|tar|msi|bin|7z|psd|dmg|iso|"
                           r"epub|dll|cnf|tgz|sha1|thmx|mso|arff|rtf|jar|csv|rm|smil|wmv|swf|"
-                          r"wma|zip|rar|gz|war|apk|mpg|bam|emx|bib|shar|lif|ppsx|wvx|odc|pps)$" )
+                          r"wma|zip|rar|gz|war|apk|mpg|bam|emx|bib|shar|lif|ppsx|wvx|odc|pps|xml|fig|dtd|sql|java|cp|sh|svg|conf|ipynb|json|scm|ff|py)$" )
         
-        gitlab_avoids = {"commit", "compare", "tags", "blame", "merge_requests", "tree"}
-        domain_avoids = {"containers.ics.uci.edu", "jujube.ics.uci.edu", "observium.ics.uci.edu", "chime.ics.uci.edu", 
-                        "dblp.ics.uci.edu", "checkmate.ics.uci.edu", "duke.ics.uci.edu", "contact.ics.uci.edu", "tippers.ics.uci.edu"}
+        gitlab_avoids = ["commit", "compare", "tags", "blame", "merge_requests", "tree"]
+        domain_avoids = ["containers.ics.uci.edu", "jujube.ics.uci.edu", "observium.ics.uci.edu", "chime.ics.uci.edu", 
+                        "dblp.ics.uci.edu", "checkmate.ics.uci.edu", "duke.ics.uci.edu", "contact.ics.uci.edu", "tippers.ics.uci.edu"]
 
         # Avoid calendar events (want to keep regular event pages)
         # YYYY-MM-DD or YYYY/MM/DD
@@ -103,7 +95,7 @@ def is_valid(url):
             return False
         
         # Allow only URLs from the specified domains
-        valid_domains = {".ics.uci.edu", ".cs.uci.edu", ".informatics.uci.edu", ".stat.uci.edu"}
+        valid_domains = [".ics.uci.edu", ".cs.uci.edu", ".informatics.uci.edu", ".stat.uci.edu"]
         # Check if authority (aka netloc) ends with valid domains
         if not any(parsed.netloc.endswith(domain) for domain in valid_domains):
             return False
@@ -112,8 +104,8 @@ def is_valid(url):
         Quality checks
         '''
         # Exclude "uploads", "files", or known low-information-value pages
-        low_value_patterns = ["uploads", "files=", "ref=", "session_id=", "=edit", "login", "account_activation", 
-        "prefs", "ical", "calendar", "tribe-bar-date", "version=", "=diff", "=download", "share="]
+        low_value_patterns = ["uploads", "files=", "ref=", "session_id=", "=edit", "login", "account_activation", "/pdf/", "image=", "tribe_events",
+        "prefs", "ical=", "calendar", "tribe-bar-date", "version=", "=diff", "=download", "share=", "zip-attachment", "JMEPopupWeb", "raw-attachment", "rev="]
         if any(pattern in parsed.path.lower() or pattern in parsed.query.lower() for pattern in low_value_patterns):
             return False
         # Don't want individual commits from gitlab
@@ -129,20 +121,13 @@ def is_valid(url):
         # Exclude file extensions in params and query
         if re.match(file_extensions, parsed.path.lower()) or re.match(file_extensions, parsed.query.lower()):
             return False
+        # Avoid txt from these paths since they are all data or code examples with little textual information
+        if re.search(r'(~wjohnson|~babaks|~jacobson|bibtex|~stasio|~kay|~seal).*\.txt$', parsed.path.lower()):
+            return False
         
         '''
         Trap prevention
         '''
-        # Get the parent URL by removing the last part of the path
-        # This is last resort as MAX_URL_LIMIT is very large!
-        parent_url = f"{parsed.netloc}{'/'.join(part:=parsed.path.rstrip('/').split('/')[:-1])}"
-        if part != ['']:
-            # Check the number of URLs visited for this authority-path pair
-            visited_parents[parent_url] += 1
-            # If the limit is exceeded, skip this URL
-            if visited_parents[parent_url] >= MAX_URL_LIMIT:
-                return False
-        
         # Check if there is event date pattern
         if re.search(date_pattern, url):
             return False

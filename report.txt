@@ -3,19 +3,153 @@ discarding the fragment part. So, for example, http://www.ics.uci.edu#aaa and ht
 Even if you implement additional methods for textual similarity detection, please keep considering the above definition of 
 unique pages for the purposes of counting the unique pages in this assignment.
 
-Answer:
+14098 unique urls, before simhash filter.
+
 
 2) What is the longest page in terms of the number of words? (HTML markup doesn’t count as words)
 
-Answer:
+https://ics.uci.edu/~eppstein/pubs/all.html, 35108 words
+
 
 3) What are the 50 most common words in the entire set of pages crawled under these domains ? (Ignore English stop words, which can be found, for example, here Links to an external site.)
 Submit the list of common words ordered by frequency.
 
-Answer:
+['ics', 'uci', 'research', 'will', 'edu', 'software', 'data', 'can', 'information', 'may', 'student', 'computer', 'support', 'students', 'time', 'engineering', 'one', 
+'projects', 'informatics', 'design', 'computing', 'search', 'science', 'university', 'graduate', 'undergraduate', 'use', 'june', 'new', 'learning', 'september', 'page', 
+'courses', 'news', 'systems', 'using', 'october', 'department', 'july', 'people']
+
 
 4) How many subdomains did you find in the ics.uci.edu domain? Submit the list of subdomains ordered alphabetically and the 
 number of unique pages detected in each subdomain. The content of this list should be lines containing URL, number, for example:
 http://vision.ics.uci.edu, 10 (not the actual number here)
 
-Answer:
+If there was only http for a domain, http was used. Otherwise, the counts were combined under https.
+
+https://accessibility.ics.uci.edu, 6
+https://acoi.ics.uci.edu, 108
+https://aiclub.ics.uci.edu, 2
+http://alderis.ics.uci.edu, 23
+https://archive.ics.uci.edu, 193
+https://asterix.ics.uci.edu, 7
+http://betapro.proteomics.ics.uci.edu, 3
+https://cbcl.ics.uci.edu, 90
+http://cdb.ics.uci.edu, 
+https://cert.ics.uci.edu, 29
+https://checkin.ics.uci.edu, 3
+http://chemdb.ics.uci.edu, 1
+https://chenli.ics.uci.edu, 10
+http://circadiomics.ics.uci.edu, 5
+https://cloudberry.ics.uci.edu, 43
+https://cml.ics.uci.edu, 178
+https://code.ics.uci.edu, 14
+http://computableplant.ics.uci.edu, 64
+https://courselisting.ics.uci.edu, 4
+http://cradl.ics.uci.edu, 18
+https://create.ics.uci.edu, 6
+https://cs.ics.uci.edu, 13
+https://cs260p-hub.ics.uci.edu, 1
+https://cs260p-staging-hub.ics.uci.edu, 1
+http://cwicsocal18.ics.uci.edu, 12
+https://cyberclub.ics.uci.edu, 50
+http://cybert.ics.uci.edu, 24
+http://datalab.ics.uci.edu, 1
+http://dejavu.ics.uci.edu, 1
+https://dgillen.ics.uci.edu, 31
+https://ds4all.ics.uci.edu, 3
+https://duttgroup.ics.uci.edu, 124
+http://dynamo.ics.uci.edu, 30
+https://eli.ics.uci.edu, 4
+https://elms.ics.uci.edu, 11
+https://emj.ics.uci.edu, 41
+http://esl.ics.uci.edu, 5
+https://evoke.ics.uci.edu, 3
+https://flamingo.ics.uci.edu, 21
+http://fr.ics.uci.edu, 3
+http://frost.ics.uci.edu, 2
+https://futurehealth.ics.uci.edu, 148
+https://gats.ics.uci.edu, 1
+https://gitlab.ics.uci.edu, 905
+https://grape.ics.uci.edu, 323
+http://graphics.ics.uci.edu, 1
+http://graphmod.ics.uci.edu, 1
+https://hack.ics.uci.edu, 2
+https://hai.ics.uci.edu, 7
+https://helpdesk.ics.uci.edu, 5
+http://hobbes.ics.uci.edu, 11
+https://hpi.ics.uci.edu, 5
+https://hub.ics.uci.edu, 4
+http://i-sensorium.ics.uci.edu, 6
+https://icde2023.ics.uci.edu, 46
+https://ics.uci.edu, 4268
+https://ics45c-hub.ics.uci.edu, 1
+https://ics45c-staging-hub.ics.uci.edu, 1
+https://ics46-hub.ics.uci.edu, 1
+https://ics46-staging-hub.ics.uci.edu, 2
+https://ics53-hub.ics.uci.edu, 1
+https://ics53-staging-hub.ics.uci.edu, 2
+https://ieee.ics.uci.edu, 4
+https://industryshowcase.ics.uci.edu, 22
+http://informatics.ics.uci.edu, 3
+https://insite.ics.uci.edu, 8
+http://intranet.ics.uci.edu, 9
+http://ipubmed.ics.uci.edu, 1
+https://isg.ics.uci.edu, 231
+https://jgarcia.ics.uci.edu, 31
+https://julia-hub.ics.uci.edu, 1
+https://luci.ics.uci.edu, 4
+https://mailman.ics.uci.edu, 17
+https://malek.ics.uci.edu, 1
+https://mcs.ics.uci.edu, 10
+https://mdogucu.ics.uci.edu, 3
+https://mds.ics.uci.edu, 27
+https://mhcid.ics.uci.edu, 21
+http://mlphysics.ics.uci.edu, 18
+http://mondego.ics.uci.edu, 3
+http://motifmap-rna.ics.uci.edu, 2
+http://motifmap.ics.uci.edu, 2
+https://mover.ics.uci.edu, 24
+https://mswe.ics.uci.edu, 10
+http://mupro.proteomics.ics.uci.edu, 3
+https://nalini.ics.uci.edu, 7
+https://ngs.ics.uci.edu, 1499
+https://oai.ics.uci.edu, 5
+https://pastebin.ics.uci.edu, 1
+http://pepito.proteomics.ics.uci.edu, 5
+https://phpmyadmin.ics.uci.edu, 49
+http://psearch.ics.uci.edu, 1
+http://radicle.ics.uci.edu, 6
+https://reactions.ics.uci.edu, 5
+https://redmiles.ics.uci.edu, 1
+http://riscit.ics.uci.edu, 3
+http://sana.ics.uci.edu, 4
+http://scale.ics.uci.edu, 6
+http://scratch.proteomics.ics.uci.edu, 4
+http://sdcl.ics.uci.edu, 203
+https://seal.ics.uci.edu, 7
+http://selectpro.proteomics.ics.uci.edu, 5
+http://sherlock.ics.uci.edu, 6
+https://sli.ics.uci.edu, 297
+http://sourcerer.ics.uci.edu, 1
+http://sparcfire.ics.uci.edu, 3
+https://speedtest.ics.uci.edu, 1
+https://staging-hub.ics.uci.edu, 1
+http://stairs.ics.uci.edu, 3
+https://statconsulting.ics.uci.edu, 5
+https://statistics-stage.ics.uci.edu, 11
+https://student-council.ics.uci.edu, 16
+https://students.ics.uci.edu, 1
+https://summeracademy.ics.uci.edu, 6
+https://swiki.ics.uci.edu, 730
+https://tad.ics.uci.edu, 2
+http://tastier.ics.uci.edu, 1
+https://transformativeplay.ics.uci.edu, 62
+https://tutoring.ics.uci.edu, 5
+http://tutors.ics.uci.edu, 1
+https://ugradforms.ics.uci.edu, 1
+https://unite.ics.uci.edu, 10
+http://vision.ics.uci.edu, 201
+https://wearablegames.ics.uci.edu, 9
+https://wics.ics.uci.edu, 575
+https://wiki.ics.uci.edu, 1453
+http://www-db.ics.uci.edu, 25
+http://xtune.ics.uci.edu, 6
