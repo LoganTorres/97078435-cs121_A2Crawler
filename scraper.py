@@ -77,7 +77,6 @@ def is_valid(url):
                           r"epub|dll|cnf|tgz|sha1|thmx|mso|arff|rtf|jar|csv|rm|smil|wmv|swf|"
                           r"wma|zip|rar|gz|war|apk|mpg|bam|emx|bib|shar|lif|ppsx|wvx|odc|pps|xml|fig|dtd|sql|java|cp|sh|svg|conf|ipynb|json|scm|ff|py)$" )
         
-        gitlab_avoids = ["commit", "compare", "tags", "blame", "merge_requests", "tree"]
         domain_avoids = ["containers.ics.uci.edu", "jujube.ics.uci.edu", "observium.ics.uci.edu", "chime.ics.uci.edu", 
                         "dblp.ics.uci.edu", "checkmate.ics.uci.edu", "duke.ics.uci.edu", "contact.ics.uci.edu", "tippers.ics.uci.edu"]
 
@@ -109,6 +108,7 @@ def is_valid(url):
         if any(pattern in parsed.path.lower() or pattern in parsed.query.lower() for pattern in low_value_patterns):
             return False
         # Don't want individual commits from gitlab
+        gitlab_avoids = ["commit", "compare", "tags", "blame", "merge_requests", "tree"]
         if parsed.netloc == "gitlab.ics.uci.edu" and any(term in parsed.path for term in gitlab_avoids):
             return False
         # These domains are known to stall

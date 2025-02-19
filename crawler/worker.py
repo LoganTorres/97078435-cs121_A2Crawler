@@ -84,7 +84,8 @@ class Worker(Thread):
                 self.frontier.mark_url_complete(tbd_url)
                 continue
 
-            resp = download(tbd_url, self.config, self.logger) # Requests for page/resource and will download it (which in the real-world would be saved in the document store)
+            # Requests for page/resource and will download it (which in the real-world would be saved in the document store)
+            resp = download(tbd_url, self.config, self.logger)
             self.logger.info(
                 f"Downloaded {tbd_url}, status <{resp.status}>, "
                 f"using cache {self.config.cache_server}.")
@@ -114,7 +115,7 @@ class Worker(Thread):
                         break
 
             if not is_near_duplicate:
-                self._fingerprints.add(fingerprint) #Avoid adding to fingerprint set if it was a duplicate of another
+                self._fingerprints.add(fingerprint) # Avoid adding to fingerprint set if it was a duplicate of another
                 for scraped_url in scraper.scraper(tbd_url, resp): # adding URLs to the frontier
                     self.frontier.add_url(scraped_url)
 
@@ -133,8 +134,11 @@ class Worker(Thread):
             self.frontier.mark_url_complete(tbd_url)
             time.sleep(self.config.time_delay) # Delay for politeness
 
-    # Fetch or return cached RobotFileParser for a given URL.
     def _get_parser(self, robots_url):
+        '''
+        Helper for _self.can_fetch
+            - Returns the RobotFileParser object for a particular url 
+        '''
         domain = urlparse(robots_url).netloc
         if domain not in self.robots_cache:
             # Use the provided download function instead of parser.read()
@@ -156,6 +160,16 @@ class Worker(Thread):
     
     # Check if a URL is allowed for a given user agent.
     def _can_fetch(self, target_url, robots_url):
+        '''
+        Checks if the target_url is able to be fetched based on the robots.txt.
+
+        @Parameters:
+        target_url - the url we are trying to crawl.
+        robots_url - the url to the robots.txt of the target.
+
+        @Returns:
+        Boolean determining if we can crawl the target_url.
+        '''
         parser = self._get_parser(robots_url)
         return parser.can_fetch(self.config.user_agent, target_url)
 
